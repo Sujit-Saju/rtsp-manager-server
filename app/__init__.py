@@ -15,7 +15,7 @@ from app.core.config import Config
 from app.core.session import get_db
 from app.database import engine, Base
 from app.core.logger import logger
-from app.utils.stream_manager import _prewarm_mediamtx, check_dependencies, starting_streaming
+from app.utils.stream_manager import check_dependencies, starting_streaming
 
 
 def create_app() -> Quart:
@@ -68,9 +68,6 @@ def create_app() -> Quart:
 
         check_dependencies()
         logger.info("FFmpeg and MediaMTX verified.")
-        
-        # Start MediaMTX immediately at startup, don't wait for first stream
-        _prewarm_mediamtx()
 
         logger.info("Database ready.")
 

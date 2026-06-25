@@ -56,15 +56,6 @@ def check_dependencies():
 # MediaMTX lifecycle
 # ─────────────────────────────────────────
 
-def _prewarm_mediamtx():
-    """Start MediaMTX at app startup so it's ready before first stream."""
-    global _stream_count
-    with _mediamtx_lock:
-        _stream_count = 1  # prevent it from shutting down automatically
-    _ensure_mediamtx_running()
-    with _mediamtx_lock:
-        _stream_count = 0  # reset — will be managed by actual streams
-    print("[mediamtx] Pre-warmed and ready.")
 
 def _write_mediamtx_config() -> str:
     config = (

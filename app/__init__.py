@@ -5,9 +5,10 @@
 # ============================================
 
 import os
+import re
 
 from app.controller import register_all
-from quart import Quart, send_from_directory
+from quart import Quart, Response, request, send_from_directory
 from quart_cors import cors
 from quart_schema import QuartSchema
 
@@ -48,10 +49,13 @@ def create_app() -> Quart:
 
     app = cors(
         app,
-        allow_origin=[frontend_url],
+        allow_origin=[frontend_url, "http://localhost:3000"],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization"],
+        # 1. Add "Range" here so the browser is allowed to ask for video chunks
+        allow_headers=["Content-Type", "Authorization", "Range"],
+        # 2. Crucial for video: Expose these streaming headers to the frontend browser
+        expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"]
     )
 
     # ---------------------------------------
@@ -90,10 +94,61 @@ def create_app() -> Quart:
     # Static file serving for uploads
     # ---------------------------------------
 
-    @app.route("/api/v1/uploads/<path:filename>")
+    # @app.route("/api/v1/uploads/<path:filename>")
+    # async def serve_uploads(filename):
+    #     uploads_dir = os.path.abspath("uploads")
+    #     return await send_from_directory(uploads_dir, filename)
+
+    @app.route("/api/v1/uploads/<path:filename>", methods=["GET", "OPTIONS"])
     async def serve_uploads(filename):
+        # If it's a preflight OPTIONS request, let Quart's CORS extension handle it
+        if request.method == "OPTIONS":
+            return "", 204
+
+        # --- Your existing logic ---
+        if filename.startswith("uploads/"):
+            filename = filename.replace("uploads/", "", 1)
+            
         uploads_dir = os.path.abspath("uploads")
-        return await send_from_directory(uploads_dir, filename)
+        file_path = os.path.join(uploads_dir, filename)
+
+        if not os.path.exists(file_path):
+            return "File not found", 404
+
+        file_size = os.path.getsize(file_path)
+        range_header = request.headers.get("Range", None)
+
+        if not range_header:
+            return await send_from_directory(uploads_dir, filename)
+
+        byte_match = re.search(r'bytes=(\d+)-(\d*)', range_header)
+        if not byte_match:
+            return await send_from_directory(uploads_dir, filename)
+
+        start = int(byte_match.group(1))
+        end = byte_match.group(2)
+        end = int(end) if end else file_size - 1
+
+        if start >= file_size:
+            return "Requested Range Not Satisfiable", 416
+        
+        chunk_size = (end - start) + 1
+
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            data = f.read(chunk_size)
+
+        response = Response(
+            data, 
+            status=206, 
+            mimetype="video/mp4", 
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Content-Length": str(chunk_size),
+            }
+        )
+        return response
     
     # ---------------------------------------
     # Blueprints

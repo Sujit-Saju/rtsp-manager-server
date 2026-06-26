@@ -1,7 +1,7 @@
 logLevel: error
 rtspAddress: :8554
 rtmp: no
-hls: no
+hls: yes
 webrtc: no
 srt: no
 paths:

@@ -77,7 +77,7 @@ def _write_mediamtx_config() -> str:
         "logLevel: error\n"
         f"rtspAddress: :{RTSP_PORT}\n"
         "rtmp: no\n"
-        "hls: no\n"
+        "hls: yes\n"
         "webrtc: no\n"
         "srt: no\n"
         "paths:\n"

@@ -1,127 +1,163 @@
-# RTSP Manager Server
+# RTSP Manager — Server
 
-A high-performance, asynchronous REST API service built with **Quart** and **SQLAlchemy** (using **aiosqlite**) for managing RTSP video streams, camera configurations, and sequence generation. 
+The backend for RTSP Manager. Upload a video file and get a live RTSP stream back — no physical camera required. The server handles video storage, transcoding via FFmpeg, and stream publishing through an embedded MediaMTX server.
 
-## Features
+---
 
-- **Asynchronous Architecture**: Fully async backend powered by **Quart** (Flask-compatible ASGI framework) and **Hypercorn**.
-- **Database Engine**: Async database access using **SQLAlchemy 2.0** and **aiosqlite** (SQLite).
-- **Auto-Migrating Schema**: Automated database table creation on startup.
-- **RESTful Stream Management**: Endpoints for creating, updating, retrieving, and deleting video streams.
-- **Unique Code Generator**: Dedicated service for managing and generating custom unique codes (e.g. `STREAM00001`) with configurable prefixes, width, and date structures.
-- **Interactive API Docs**: Automatic Swagger UI/OpenAPI documentation generation via `quart-schema`.
-- **CORS-enabled**: Multi-origin configurations out of the box.
+## How It Works
+
+1. You upload a video file (MP4, AVI, MOV, MKV, etc.) through the API
+2. The server saves the file and extracts a snapshot thumbnail using OpenCV
+3. A unique stream code is generated (e.g. `STREAM-0001`)
+4. FFmpeg starts pushing the video to MediaMTX as a looping RTSP stream
+5. The RTSP URL (`rtsp://<host>:8554/STREAM-0001`) is returned and ready to use
+
+MediaMTX starts automatically when the first stream is created and shuts down when the last stream is deleted.
 
 ---
 
 ## Tech Stack
 
-- **Framework**: [Quart](https://pgjones.gitlab.io/quart/)
-- **ASGI Server**: [Hypercorn](https://pgjones.gitlab.io/hypercorn/)
-- **ORM**: [SQLAlchemy](https://www.sqlalchemy.org/)
-- **Database Driver**: [aiosqlite](https://github.com/omnilib/aiosqlite)
-- **API Spec**: [Quart-Schema](https://github.com/pgjones/quart-schema)
+- **Python** with **Quart** (async web framework) + **Hypercorn** (ASGI server)
+- **SQLAlchemy** async ORM with **SQLite** (via aiosqlite)
+- **FFmpeg** for video transcoding
+- **OpenCV** for snapshot extraction
+- **MediaMTX** (embedded binary) as the RTSP server
+- **quart-schema** + **Pydantic** for request validation
 
 ---
 
-## Directory Structure
+## Project Structure
 
-```text
-rtsp-manager-server/
-├── app/
-│   ├── controller/          # Route handlers & blueprint registration
-│   ├── core/                # Configuration, logging, and common utilities
-│   ├── database/            # DB engine initialization & declarative base
-│   ├── models/              # SQLAlchemy database models
-│   ├── repositories/        # Data access layer (generic CRUD operations)
-│   ├── schemas/             # Request/response validation schemas
-│   ├── services/            # Business logic layer
-│   └── utils/               # Common helper functions
-├── logs/                    # Application runtime logs
-├── uploads/                 # Directory for media uploads / stream recordings
-├── .env.example             # Example environment configuration
-├── run.py                   # Application entry point
-└── requirements.txt         # Package dependencies
+```
+app/
+├── controller/         # HTTP route handlers
+├── services/           # Business logic (stream lifecycle)
+├── repositories/       # Database access layer
+├── models/             # SQLAlchemy ORM models
+├── utils/
+│   ├── stream_manager.py   # FFmpeg + MediaMTX orchestration
+│   ├── file_upload.py      # Video upload + snapshot generation
+│   └── response.py         # Standardised API response helpers
+├── core/               # Config, logger, DB session
+└── bin/                # MediaMTX binaries (linux + windows)
 ```
 
 ---
 
 ## Getting Started
 
-### 1. Prerequisites
-Ensure you have **Python 3.10+** installed on your system.
+### Prerequisites
 
-### 2. Setup Virtual Environment
-Clone the repository, navigate to the project directory, and create a virtual environment:
+- Python 3.10+
+- FFmpeg installed and available on `PATH`
+
+### Setup
 
 ```bash
-# Create venv
+# Clone the repo
+git clone https://github.com/sujit-saju/rtsp-manager-server.git
+cd rtsp-manager-server
+
+# Create and activate a virtual environment
 python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
 
-# Activate venv (Windows PowerShell)
-.\venv\Scripts\Activate.ps1
-
-# Activate venv (Windows CMD)
-.\venv\Scripts\activate.bat
-
-# Activate venv (macOS/Linux)
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-Install all required packages:
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### 4. Configure Environment Variables
-Copy `.env.example` to `.env` and adjust variables as needed:
-
-```bash
+# Configure environment
 cp .env.example .env
-```
+# Edit .env — set RTSP_HOST to your machine's local IP
 
-Default settings in `.env`:
-- `HOST`: Bind address (default: `0.0.0.0`)
-- `PORT`: Port to listen on (default: `5000`)
-- `DATABASE_URL`: Connection string (default: `sqlite+aiosqlite:///rtsp_manager.db`)
-- `RTSP_PORT`: Default RTSP port (default: `8554`)
-
----
-
-## Running the Application
-
-Start the development server:
-
-```bash
+# Run the server
 python run.py
 ```
 
-Upon starting:
-1. The app automatically runs database schema migration to check and generate required tables (`streams` and `tbl_seq_number`).
-2. The server spins up at: `http://localhost:5000` (or whichever port is configured in your `.env` file).
+The API will be available at `http://localhost:5000`.
 
 ---
 
-## API Documentation
+## Environment Variables
 
-Interactive OpenAPI documentation is available via Swagger UI. Once the server is running, navigate to:
+| Variable | Default | Description |
+|---|---|---|
+| `HOST` | `0.0.0.0` | Server bind address |
+| `PORT` | `5000` | HTTP port |
+| `RTSP_HOST` | `192.168.0.234` | Your machine's IP — used in RTSP URLs |
+| `RTSP_PORT` | `8554` | Port MediaMTX listens on |
+| `DATABASE_URL` | `sqlite+aiosqlite:///rtsp_manager.db` | Database connection string |
+| `FFMPEG_BIN` | `ffmpeg` | Path to FFmpeg binary |
+| `UPLOAD_FOLDER` | `uploads` | Directory for uploaded videos |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
+| `API_PREFIX` | `/api/v1` | API route prefix |
 
-- **Swagger UI**: [http://localhost:5000/api/v1/docs](http://localhost:5000/api/v1/docs)
-- **OpenAPI Schema**: [http://localhost:5000/api/v1/openapi.json](http://localhost:5000/api/v1/openapi.json)
+---
 
-### Main Endpoints
+## API Reference
+
+All endpoints are prefixed with `/api/v1/stream`.
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| **POST** | `/api/v1/streams` | Register/Create a new stream |
-| **GET** | `/api/v1/streams` | Retrieve all registered streams |
-| **GET** | `/api/v1/streams/<uniq_code>` | Retrieve details of a specific stream |
-| **PUT** | `/api/v1/streams/<uniq_code>` | Update an existing stream |
-| **DELETE** | `/api/v1/streams/<uniq_code>` | Delete a stream registration |
+|---|---|---|
+| `POST` | `/add` | Create a stream (multipart/form-data) |
+| `GET` | `/list` | List all streams |
+| `GET` | `/<uniq_code>` | Get a single stream |
+| `DELETE` | `/delete?uniq_code=<code>` | Delete a stream and its uploaded file |
+
+### Create Stream — Form Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `file` | File | Video file (max 50 MB) |
+| `streamName` | string | Display name for the stream |
+| `fps` | integer | Target frame rate |
+| `resolution` | string | e.g. `1920x1080` |
+| `loopEnabled` | boolean | Loop the video continuously |
+| `status` | boolean | Enable stream on creation |
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "message": "Stream created successfully.",
+  "data": {
+    "streamName": "Loading Dock North",
+    "fps": 30,
+    "uniqCode": "STREAM-0001",
+    "resolution": "1920x1080",
+    "status": true,
+    "loopEnabled": true,
+    "rtspUrl": "rtsp://192.168.0.234:8554/STREAM-0001"
+  }
+}
+```
+
+---
+
+## Consuming the RTSP Stream
+
+```bash
+# VLC
+vlc rtsp://192.168.0.234:8554/STREAM-0001
+
+# FFplay
+ffplay rtsp://192.168.0.234:8554/STREAM-0001
+
+# OpenCV (Python)
+import cv2
+cap = cv2.VideoCapture("rtsp://192.168.0.234:8554/STREAM-0001")
+```
+
+---
+
+## Supported Video Formats
+
+MP4, AVI, MOV, MKV, FLV, WebM
 
 ---
 
 ## License
-Distributed under the MIT License. See `LICENSE` for more information.
+
+MIT — see [LICENSE](LICENSE) for details.
